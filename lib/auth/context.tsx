@@ -26,10 +26,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single()
-    
+      .maybeSingle()
+
     if (data) {
       setProfile(data as Profile)
+      return
+    }
+
+    // Profile doesn't exist — create it (user registered before tables were set up)
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const username =
+      authUser?.user_metadata?.username || 'user_' + userId.slice(0, 8)
+    const userType = authUser?.user_metadata?.user_type || 'archaeologist'
+
+    const { data: newProfile } = await supabase
+      .from('profiles')
+      .insert({ id: userId, username, user_type: userType })
+      .select()
+      .maybeSingle()
+
+    if (newProfile) {
+      setProfile(newProfile as Profile)
     }
   }
 
@@ -52,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getUser()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         setUser(session?.user ?? null)
         if (session?.user) {
           await fetchProfile(session.user.id)
